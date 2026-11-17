@@ -267,6 +267,21 @@ The tests cover:
 - Platform credentials are loaded through environment variables.
 - The `.env` file is excluded from version control.
 - Never publish private API credentials in the repository.
+## Screenshots and Testing Evidence
+
+The following screenshots demonstrate the implementation, API execution, and project evidence.
+
+### Screenshot 1
+![Screenshot 1](Screenshots/scr1.png)
+
+### Screenshot 2
+![Screenshot 2](Screenshots/scr2.png)
+
+### Terminal Logs
+![Terminal Logs](Screenshots/log.png)
+
+### GitHub Repository
+![GitHub Repository](Screenshots/git1.png)
 
 ## Author
 

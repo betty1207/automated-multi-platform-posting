@@ -1,56 +1,55 @@
-
 import os
-import httpx
 from datetime import datetime, timezone
 
+import httpx
 
-def publish_to_discord(message: str, cta_link: str) -> dict:
+
+def publish_to_discord(message: str) -> dict:
     webhook_url = os.getenv("DISCORD_WEBHOOK_URL")
 
     if not webhook_url:
         return {
             "platform": "Discord",
             "status": "failed",
-            "post_url": None,
-            "public_accessible": False,
-            "posted_at": None,
-            "error": "Discord webhook URL is missing."
+            "posted_url": None,
+            "public_access": False,
+            "date": None,
+            "time": None,
+            "error": "Discord webhook URL is missing.",
         }
 
     try:
-        post_text = f"{message.strip()} {cta_link}"
-
         response = httpx.post(
             webhook_url,
             params={"wait": "true"},
-            json={"content": post_text},
-            timeout=30
+            json={"content": message},
+            timeout=30,
         )
 
-        if response.status_code != 200:
-            raise Exception(
-                f"Discord API error: {response.status_code} - "
-                f"{response.text}"
-            )
-
+        response.raise_for_status()
         message_data = response.json()
 
-        # Retrieve webhook details to obtain the server ID.
+        message_id = message_data["id"]
+        posted_at = datetime.fromisoformat(
+            message_data["timestamp"].replace("Z", "+00:00")
+        )
+
+        # Retrieve webhook details to identify the server and channel.
         webhook_response = httpx.get(
             webhook_url,
-            timeout=30
+            timeout=30,
         )
+
         webhook_response.raise_for_status()
         webhook_data = webhook_response.json()
 
-        message_id = message_data["id"]
-        channel_id = message_data.get("channel_id") or webhook_data.get("channel_id")
         guild_id = webhook_data.get("guild_id")
+        channel_id = webhook_data.get("channel_id")
 
-        post_url = None
+        posted_url = None
 
         if guild_id and channel_id:
-            post_url = (
+            posted_url = (
                 f"https://discord.com/channels/"
                 f"{guild_id}/{channel_id}/{message_id}"
             )
@@ -58,21 +57,20 @@ def publish_to_discord(message: str, cta_link: str) -> dict:
         return {
             "platform": "Discord",
             "status": "success",
-            "post_url": post_url,
-            "public_accessible": False,
-            "posted_at": message_data.get(
-                "timestamp",
-                datetime.now(timezone.utc).isoformat()
-            ),
-            "error": None
+            "posted_url": posted_url,
+            "public_access": False,
+            "date": posted_at.date().isoformat(),
+            "time": posted_at.time().isoformat(timespec="seconds"),
+            "error": None,
         }
 
     except Exception as error:
         return {
             "platform": "Discord",
             "status": "failed",
-            "post_url": None,
-            "public_accessible": False,
-            "posted_at": None,
-            "error": str(error)
+            "posted_url": None,
+            "public_access": False,
+            "date": None,
+            "time": None,
+            "error": str(error),
         }

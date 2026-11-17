@@ -1,66 +1,69 @@
 import os
+from datetime import datetime
+
 import httpx
-from datetime import datetime, timezone
 
 
-def publish_to_mastodon(message: str, cta_link: str) -> dict:
+def publish_to_mastodon(message: str) -> dict:
     access_token = os.getenv("MASTODON_ACCESS_TOKEN")
     base_url = os.getenv(
         "MASTODON_API_BASE_URL",
-        "https://mastodon.social"
+        "https://mastodon.social",
     ).rstrip("/")
 
     if not access_token:
         return {
             "platform": "Mastodon",
             "status": "failed",
-            "post_url": None,
-            "public_accessible": False,
-            "posted_at": None,
-            "error": "Mastodon access token is missing."
+            "posted_url": None,
+            "public_access": False,
+            "date": None,
+            "time": None,
+            "error": "Mastodon access token is missing.",
         }
 
     try:
-        post_text = f"{message.strip()} {cta_link}"
-
-        headers = {
-            "Authorization": f"Bearer {access_token}"
-        }
-
         response = httpx.post(
             f"{base_url}/api/v1/statuses",
-            headers=headers,
-            data={
-                "status": post_text,
-                "visibility": "public"
+            headers={
+                "Authorization": f"Bearer {access_token}",
             },
-            timeout=30
+            data={
+                "status": message,
+                "visibility": "public",
+            },
+            timeout=30,
         )
 
         response.raise_for_status()
-        result = response.json()
+        data = response.json()
+
+        posted_url = data.get("url")
+        visibility = data.get("visibility")
+
+        posted_at = datetime.fromisoformat(
+            data["created_at"].replace("Z", "+00:00")
+        )
 
         return {
             "platform": "Mastodon",
             "status": "success",
-            "post_url": result.get("url"),
-            "public_accessible": (
-                result.get("visibility") == "public"
-                and bool(result.get("url"))
+            "posted_url": posted_url,
+            "public_access": (
+                visibility == "public" and bool(posted_url)
             ),
-            "posted_at": result.get(
-                "created_at",
-                datetime.now(timezone.utc).isoformat()
-            ),
-            "error": None
+            "date": posted_at.date().isoformat(),
+            "time": posted_at.time().isoformat(timespec="seconds"),
+            "error": None,
         }
 
     except Exception as error:
         return {
             "platform": "Mastodon",
             "status": "failed",
-            "post_url": None,
-            "public_accessible": False,
-            "posted_at": None,
-            "error": str(error)
+            "posted_url": None,
+            "public_access": False,
+            "date": None,
+            "time": None,
+            "error": str(error),
         }

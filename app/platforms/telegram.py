@@ -1,11 +1,10 @@
 import os
-import httpx
-
 from datetime import datetime, timezone
 
+import httpx
 
-def publish_to_telegram(message: str, cta_link: str) -> dict:
 
+def publish_to_telegram(message: str) -> dict:
     bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
     chat_id = os.getenv("TELEGRAM_CHAT_ID")
 
@@ -13,70 +12,70 @@ def publish_to_telegram(message: str, cta_link: str) -> dict:
         return {
             "platform": "Telegram",
             "status": "failed",
-            "post_url": None,
-            "public_accessible": False,
-            "posted_at": None,
-            "error": "Telegram credentials are missing."
+            "posted_url": None,
+            "public_access": False,
+            "date": None,
+            "time": None,
+            "error": "Telegram credentials are missing.",
         }
 
     try:
-        post_text = f"{message.strip()} {cta_link}"
+        api_url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
 
-        api_url = (
-            f"https://api.telegram.org/bot{bot_token}/sendMessage"
-        )
+        # Bypass problematic environment proxy settings.
+        with httpx.Client(
+            timeout=45,
+            trust_env=False,
+        ) as client:
 
-        response = httpx.post(
-            api_url,
-            json={
-                "chat_id": chat_id,
-                "text": post_text
-            },
-            timeout=30
-        )
-
-        result = response.json()
-
-        # Check whether Telegram accepted the message.
-        if response.status_code != 200 or not result.get("ok"):
-            raise Exception(
-                result.get(
-                    "description",
-                    "Telegram publishing failed."
-                )
+            response = client.post(
+                api_url,
+                json={
+                    "chat_id": chat_id,
+                    "text": message,
+                },
             )
 
-        message_data = result["result"]
+            response.raise_for_status()
+            data = response.json()
 
+        if not data.get("ok"):
+            raise Exception(
+                data.get("description", "Telegram posting failed.")
+            )
+
+        message_data = data["result"]
         message_id = message_data["message_id"]
-        chat_username = message_data["chat"].get("username")
 
-        post_url = None
+        chat_username = message_data.get("chat", {}).get("username")
+
+        posted_url = None
 
         if chat_username:
-            post_url = (
-                f"https://t.me/{chat_username}/{message_id}"
-            )
+            posted_url = f"https://t.me/{chat_username}/{message_id}"
+
+        posted_at = datetime.fromtimestamp(
+            message_data["date"],
+            tz=timezone.utc,
+        )
 
         return {
             "platform": "Telegram",
             "status": "success",
-            "post_url": post_url,
-            "public_accessible": bool(post_url),
-            "posted_at": datetime.fromtimestamp(
-                message_data["date"],
-                timezone.utc
-            ).isoformat(),
-            "error": None
+            "posted_url": posted_url,
+            "public_access": bool(posted_url),
+            "date": posted_at.date().isoformat(),
+            "time": posted_at.time().isoformat(timespec="seconds"),
+            "error": None,
         }
 
     except Exception as error:
-
         return {
             "platform": "Telegram",
             "status": "failed",
-            "post_url": None,
-            "public_accessible": False,
-            "posted_at": None,
-            "error": str(error)
+            "posted_url": None,
+            "public_access": False,
+            "date": None,
+            "time": None,
+            "error": str(error),
         }

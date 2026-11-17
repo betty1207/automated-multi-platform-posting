@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from atproto import Client
 
 
-def publish_to_bluesky(message: str, cta_link: str) -> dict:
+def publish_to_bluesky(message: str) -> dict:
     handle = os.getenv("BLUESKY_HANDLE")
     app_password = os.getenv("BLUESKY_APP_PASSWORD")
 
@@ -12,47 +12,44 @@ def publish_to_bluesky(message: str, cta_link: str) -> dict:
         return {
             "platform": "Bluesky",
             "status": "failed",
-            "post_url": None,
-            "public_accessible": False,
-            "posted_at": None,
-            "error": "Bluesky credentials are missing."
+            "posted_url": None,
+            "public_access": False,
+            "date": None,
+            "time": None,
+            "error": "Bluesky credentials are missing.",
         }
 
     try:
         client = Client()
-
-        # Step 1: Authenticate with Bluesky.
         client.login(handle, app_password)
 
-        # Step 2: Prepare the message and CTA link.
-        post_text = f"{message.strip()} {cta_link}"
+        # Publish the exact message supplied to the API.
+        response = client.send_post(message)
 
-        # Step 3: Publish the post.
-        response = client.send_post(post_text)
-
-        # Step 4: Extract the post identifier.
         record_key = response.uri.split("/")[-1]
-
-        # Step 5: Construct the public post URL.
-        post_url = (
+        posted_url = (
             f"https://bsky.app/profile/{handle}/post/{record_key}"
         )
+
+        posted_at = datetime.now(timezone.utc)
 
         return {
             "platform": "Bluesky",
             "status": "success",
-            "post_url": post_url,
-            "public_accessible": True,
-            "posted_at": datetime.now(timezone.utc).isoformat(),
-            "error": None
+            "posted_url": posted_url,
+            "public_access": True,
+            "date": posted_at.date().isoformat(),
+            "time": posted_at.time().isoformat(timespec="seconds"),
+            "error": None,
         }
 
     except Exception as error:
         return {
             "platform": "Bluesky",
             "status": "failed",
-            "post_url": None,
-            "public_accessible": False,
-            "posted_at": None,
-            "error": str(error)
+            "posted_url": None,
+            "public_access": False,
+            "date": None,
+            "time": None,
+            "error": str(error),
         }

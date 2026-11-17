@@ -1,9 +1,10 @@
 import os
-import httpx
 from datetime import datetime, timezone
 
+import httpx
 
-def publish_to_slack(message: str, cta_link: str) -> dict:
+
+def publish_to_slack(message: str) -> dict:
     bot_token = os.getenv("SLACK_BOT_TOKEN")
     channel_id = os.getenv("SLACK_CHANNEL_ID")
 
@@ -11,85 +12,93 @@ def publish_to_slack(message: str, cta_link: str) -> dict:
         return {
             "platform": "Slack",
             "status": "failed",
-            "post_url": None,
-            "public_accessible": False,
-            "posted_at": None,
-            "error": "Slack credentials are missing."
+            "posted_url": None,
+            "public_access": False,
+            "date": None,
+            "time": None,
+            "error": "Slack credentials are missing.",
         }
 
     headers = {
         "Authorization": f"Bearer {bot_token}",
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
     }
 
     try:
-        post_text = f"{message.strip()} {cta_link}"
-
-        # Publish the message
+        # Publish the message.
         response = httpx.post(
             "https://slack.com/api/chat.postMessage",
             headers=headers,
             json={
                 "channel": channel_id,
-                "text": post_text
+                "text": message,
             },
-            timeout=30
+            timeout=30,
         )
 
-        result = response.json()
+        response.raise_for_status()
+        data = response.json()
 
-        if not result.get("ok"):
-            raise Exception(
-                result.get("error", "Slack publishing failed.")
-            )
+        if not data.get("ok"):
+            raise Exception(data.get("error", "Slack posting failed."))
 
-        message_ts = result["ts"]
-        posted_channel = result["channel"]
+        message_timestamp = data["ts"]
 
         posted_at = datetime.fromtimestamp(
-            float(message_ts),
-            timezone.utc
-        ).isoformat()
-
-        # Retrieve the actual message permalink
-        permalink_response = httpx.get(
-            "https://slack.com/api/chat.getPermalink",
-            headers=headers,
-            params={
-                "channel": posted_channel,
-                "message_ts": message_ts
-            },
-            timeout=30
+            float(message_timestamp),
+            tz=timezone.utc,
         )
 
-        permalink_result = permalink_response.json()
+        posted_url = None
+        permalink_error = None
 
-        post_url = None
-        error = None
-
-        if permalink_result.get("ok"):
-            post_url = permalink_result.get("permalink")
-        else:
-            error = (
-                "Message posted successfully, but permalink retrieval "
-                f"failed: {permalink_result.get('error', 'Unknown error')}"
+        # Retrieve the published message's permalink.
+        try:
+            permalink_response = httpx.get(
+                "https://slack.com/api/chat.getPermalink",
+                headers={"Authorization": f"Bearer {bot_token}"},
+                params={
+                    "channel": channel_id,
+                    "message_ts": message_timestamp,
+                },
+                timeout=30,
             )
+
+            permalink_response.raise_for_status()
+            permalink_data = permalink_response.json()
+
+            if permalink_data.get("ok"):
+                posted_url = permalink_data.get("permalink")
+            else:
+                permalink_error = permalink_data.get(
+                    "error",
+                    "Could not retrieve the message permalink.",
+                )
+
+        except Exception as error:
+            permalink_error = str(error)
 
         return {
             "platform": "Slack",
             "status": "success",
-            "post_url": post_url,
-            "public_accessible": False,
-            "posted_at": posted_at,
-            "error": error
+            "posted_url": posted_url,
+            "public_access": False,
+            "date": posted_at.date().isoformat(),
+            "time": posted_at.time().isoformat(timespec="seconds"),
+            "error": (
+                f"Message published, but permalink retrieval failed: {permalink_error}"
+                if permalink_error
+                else None
+            ),
         }
 
     except Exception as error:
         return {
             "platform": "Slack",
             "status": "failed",
-            "post_url": None,
-            "public_accessible": False,
-            "posted_at": None,
-            "error": str(error)
+            "posted_url": None,
+            "public_access": False,
+            "date": None,
+            "time": None,
+            "error": str(error),
         }
